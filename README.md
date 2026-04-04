@@ -207,7 +207,7 @@ The YNAB API allows 200 requests per hour per access token. The CLI returns a cl
 
 ## Agent Integration
 
-See [AGENT.md](AGENT.md) for detailed instructions on integrating this CLI with AI agents like Claude Code, OpenClaw, and others.
+See **[INTEGRATION.md](INTEGRATION.md)** for detailed instructions on integrating this CLI with AI agents like Claude Code, OpenClaw, and others — including install scripts, MCP server config, OpenClaw tool definitions, and common agent workflows.
 
 ## Development
 
