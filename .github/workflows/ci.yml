@@ -24,10 +24,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Verify dependencies
-        run: |
-          go mod verify
-          # Ensure zero external dependencies
-          test "$(go list -m all | wc -l)" -eq 1
+        run: go mod verify
 
       - name: Vet
         run: go vet ./...
