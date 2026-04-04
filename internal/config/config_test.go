@@ -1,0 +1,162 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestResolveToken_FlagTakesPriority(t *testing.T) {
+	t.Setenv("YNAB_ACCESS_TOKEN", "env-token")
+
+	got, err := ResolveToken("flag-token")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "flag-token" {
+		t.Errorf("expected 'flag-token', got %q", got)
+	}
+}
+
+func TestResolveToken_EnvFallback(t *testing.T) {
+	t.Setenv("YNAB_ACCESS_TOKEN", "env-token")
+
+	got, err := ResolveToken("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "env-token" {
+		t.Errorf("expected 'env-token', got %q", got)
+	}
+}
+
+func TestResolveToken_ConfigFileFallback(t *testing.T) {
+	t.Setenv("YNAB_ACCESS_TOKEN", "")
+
+	// Set HOME to a temp dir with a config file
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	dir := filepath.Join(tmp, ".config", "ynab-cli")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"access_token":"file-token"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveToken("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "file-token" {
+		t.Errorf("expected 'file-token', got %q", got)
+	}
+}
+
+func TestResolveToken_ErrorWhenNotFound(t *testing.T) {
+	t.Setenv("YNAB_ACCESS_TOKEN", "")
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	_, err := ResolveToken("")
+	if err == nil {
+		t.Fatal("expected error when no token found")
+	}
+}
+
+func TestResolvePlan_ExplicitTakesPriority(t *testing.T) {
+	t.Setenv("YNAB_PLAN_ID", "env-plan")
+
+	got, err := ResolvePlan("explicit-plan")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "explicit-plan" {
+		t.Errorf("expected 'explicit-plan', got %q", got)
+	}
+}
+
+func TestResolvePlan_EnvFallback(t *testing.T) {
+	t.Setenv("YNAB_PLAN_ID", "env-plan")
+
+	got, err := ResolvePlan("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "env-plan" {
+		t.Errorf("expected 'env-plan', got %q", got)
+	}
+}
+
+func TestResolvePlan_ConfigFileFallback(t *testing.T) {
+	t.Setenv("YNAB_PLAN_ID", "")
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	dir := filepath.Join(tmp, ".config", "ynab-cli")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"default_plan":"file-plan"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolvePlan("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "file-plan" {
+		t.Errorf("expected 'file-plan', got %q", got)
+	}
+}
+
+func TestResolvePlan_ErrorWhenNotFound(t *testing.T) {
+	t.Setenv("YNAB_PLAN_ID", "")
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	_, err := ResolvePlan("")
+	if err == nil {
+		t.Fatal("expected error when no plan found")
+	}
+}
+
+func TestSaveAndLoad_RoundTrip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	cfg := &Config{
+		AccessToken: "my-token-123",
+		DefaultPlan: "plan-abc",
+	}
+
+	if err := Save(cfg); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if loaded.AccessToken != cfg.AccessToken {
+		t.Errorf("AccessToken: expected %q, got %q", cfg.AccessToken, loaded.AccessToken)
+	}
+	if loaded.DefaultPlan != cfg.DefaultPlan {
+		t.Errorf("DefaultPlan: expected %q, got %q", cfg.DefaultPlan, loaded.DefaultPlan)
+	}
+}
+
+func TestLoad_ReturnsEmptyWhenFileDoesNotExist(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.AccessToken != "" || cfg.DefaultPlan != "" {
+		t.Errorf("expected empty config, got: %+v", cfg)
+	}
+}
