@@ -3,73 +3,50 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
+
+	"github.com/spf13/cobra"
 
 	"github.com/bwishan/ynab-cli/internal/config"
 )
 
 func (a *App) registerCategoryCommands() {
 	// ── categories command ──────────────────────────────────────────────
-	catCmd := &Command{
-		Name:        "categories",
-		Description: "Manage budget categories",
-		Subcommands: map[string]*Subcommand{},
+	catCmd := &cobra.Command{
+		Use:   "categories",
+		Short: "Manage budget categories",
 	}
 
-	catCmd.Subcommands["list"] = &Subcommand{
-		Name:        "list",
-		Description: "List all categories for a plan",
-		Usage:       "<plan-id> [--last-knowledge N]",
-		Run: func(ctx *Context, args []string) error {
-			var planExplicit string
-			var lastKnowledge int64
-
-			positional := []string{}
-			for i := 0; i < len(args); i++ {
-				switch {
-				case args[i] == "--last-knowledge" && i+1 < len(args):
-					v, err := strconv.ParseInt(args[i+1], 10, 64)
-					if err != nil {
-						return fmt.Errorf("invalid --last-knowledge value: %s", args[i+1])
-					}
-					lastKnowledge = v
-					i++
-				case strings.HasPrefix(args[i], "--last-knowledge="):
-					v, err := strconv.ParseInt(strings.TrimPrefix(args[i], "--last-knowledge="), 10, 64)
-					if err != nil {
-						return fmt.Errorf("invalid --last-knowledge value: %s", args[i])
-					}
-					lastKnowledge = v
-				default:
-					positional = append(positional, args[i])
-				}
+	listCmd := &cobra.Command{
+		Use:   "list [plan-id]",
+		Short: "List all categories for a plan",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var planIDArg string
+			if len(args) > 0 {
+				planIDArg = args[0]
 			}
 
-			if len(positional) > 0 {
-				planExplicit = positional[0]
-			}
-
-			planID, err := config.ResolvePlan(planExplicit)
+			planID, err := config.ResolvePlan(planIDArg)
 			if err != nil {
 				return err
 			}
 
-			data, err := ctx.Client.GetCategories(planID, lastKnowledge)
+			lastKnowledge, _ := cmd.Flags().GetInt64("last-knowledge")
+
+			data, err := a.client.GetCategories(planID, lastKnowledge)
 			if err != nil {
 				return err
 			}
 
 			headers := []string{"ID", "Group", "Name", "Budgeted", "Activity", "Balance", "Hidden"}
-			return ctx.Printer.PrintResult(data, headers, extractCategoryRows)
+			return a.printer.PrintResult(data, headers, extractCategoryRows)
 		},
 	}
+	listCmd.Flags().Int64("last-knowledge", 0, "Server knowledge for delta sync")
 
-	catCmd.Subcommands["get"] = &Subcommand{
-		Name:        "get",
-		Description: "Get a single category",
-		Usage:       "<plan-id> <category-id>",
-		Run: func(ctx *Context, args []string) error {
+	getCmd := &cobra.Command{
+		Use:   "get [plan-id] <category-id>",
+		Short: "Get a single category",
+		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 2 {
 				return fmt.Errorf("usage: ynab categories get <plan-id> <category-id>")
 			}
@@ -79,53 +56,35 @@ func (a *App) registerCategoryCommands() {
 				return err
 			}
 
-			data, err := ctx.Client.GetCategoryByID(planID, args[1])
+			data, err := a.client.GetCategoryByID(planID, args[1])
 			if err != nil {
 				return err
 			}
 
-			return ctx.Printer.PrintResult(data, nil, nil)
+			return a.printer.PrintResult(data, nil, nil)
 		},
 	}
 
-	catCmd.Subcommands["create"] = &Subcommand{
-		Name:        "create",
-		Description: "Create a new category",
-		Usage:       "<plan-id> --name NAME --category-group-id ID",
-		Run: func(ctx *Context, args []string) error {
-			var planExplicit string
-			var name, groupID string
-
-			positional := []string{}
-			for i := 0; i < len(args); i++ {
-				switch {
-				case args[i] == "--name" && i+1 < len(args):
-					name = args[i+1]
-					i++
-				case strings.HasPrefix(args[i], "--name="):
-					name = strings.TrimPrefix(args[i], "--name=")
-				case args[i] == "--category-group-id" && i+1 < len(args):
-					groupID = args[i+1]
-					i++
-				case strings.HasPrefix(args[i], "--category-group-id="):
-					groupID = strings.TrimPrefix(args[i], "--category-group-id=")
-				default:
-					positional = append(positional, args[i])
-				}
+	createCmd := &cobra.Command{
+		Use:   "create [plan-id]",
+		Short: "Create a new category",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var planIDArg string
+			if len(args) > 0 {
+				planIDArg = args[0]
 			}
 
-			if len(positional) > 0 {
-				planExplicit = positional[0]
-			}
-
-			planID, err := config.ResolvePlan(planExplicit)
+			planID, err := config.ResolvePlan(planIDArg)
 			if err != nil {
 				return err
 			}
 
+			name, _ := cmd.Flags().GetString("name")
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
+
+			groupID, _ := cmd.Flags().GetString("category-group-id")
 			if groupID == "" {
 				return fmt.Errorf("--category-group-id is required")
 			}
@@ -137,60 +96,38 @@ func (a *App) registerCategoryCommands() {
 				},
 			}
 
-			data, err := ctx.Client.CreateCategory(planID, body)
+			data, err := a.client.CreateCategory(planID, body)
 			if err != nil {
 				return err
 			}
 
-			return ctx.Printer.PrintResult(data, nil, nil)
+			return a.printer.PrintResult(data, nil, nil)
 		},
 	}
+	createCmd.Flags().String("name", "", "Category name")
+	createCmd.Flags().String("category-group-id", "", "Category group ID")
 
-	catCmd.Subcommands["update"] = &Subcommand{
-		Name:        "update",
-		Description: "Update an existing category",
-		Usage:       "<plan-id> <category-id> [--name NAME] [--note NOTE]",
-		Run: func(ctx *Context, args []string) error {
-			var name, note string
-			nameSet, noteSet := false, false
-
-			positional := []string{}
-			for i := 0; i < len(args); i++ {
-				switch {
-				case args[i] == "--name" && i+1 < len(args):
-					name = args[i+1]
-					nameSet = true
-					i++
-				case strings.HasPrefix(args[i], "--name="):
-					name = strings.TrimPrefix(args[i], "--name=")
-					nameSet = true
-				case args[i] == "--note" && i+1 < len(args):
-					note = args[i+1]
-					noteSet = true
-					i++
-				case strings.HasPrefix(args[i], "--note="):
-					note = strings.TrimPrefix(args[i], "--note=")
-					noteSet = true
-				default:
-					positional = append(positional, args[i])
-				}
-			}
-
-			if len(positional) < 2 {
+	updateCmd := &cobra.Command{
+		Use:   "update [plan-id] <category-id>",
+		Short: "Update an existing category",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 2 {
 				return fmt.Errorf("usage: ynab categories update <plan-id> <category-id> [--name NAME] [--note NOTE]")
 			}
 
-			planID, err := config.ResolvePlan(positional[0])
+			planID, err := config.ResolvePlan(args[0])
 			if err != nil {
 				return err
 			}
-			categoryID := positional[1]
+			categoryID := args[1]
 
 			fields := map[string]interface{}{}
-			if nameSet {
+			if cmd.Flags().Changed("name") {
+				name, _ := cmd.Flags().GetString("name")
 				fields["name"] = name
 			}
-			if noteSet {
+			if cmd.Flags().Changed("note") {
+				note, _ := cmd.Flags().GetString("note")
 				fields["note"] = note
 			}
 			if len(fields) == 0 {
@@ -201,20 +138,21 @@ func (a *App) registerCategoryCommands() {
 				"category": fields,
 			}
 
-			data, err := ctx.Client.UpdateCategory(planID, categoryID, body)
+			data, err := a.client.UpdateCategory(planID, categoryID, body)
 			if err != nil {
 				return err
 			}
 
-			return ctx.Printer.PrintResult(data, nil, nil)
+			return a.printer.PrintResult(data, nil, nil)
 		},
 	}
+	updateCmd.Flags().String("name", "", "Category name")
+	updateCmd.Flags().String("note", "", "Category note")
 
-	catCmd.Subcommands["get-month"] = &Subcommand{
-		Name:        "get-month",
-		Description: "Get a category for a specific month",
-		Usage:       "<plan-id> <month> <category-id>",
-		Run: func(ctx *Context, args []string) error {
+	getMonthCmd := &cobra.Command{
+		Use:   "get-month [plan-id] <month> <category-id>",
+		Short: "Get a category for a specific month",
+		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 3 {
 				return fmt.Errorf("usage: ynab categories get-month <plan-id> <month> <category-id>")
 			}
@@ -224,109 +162,75 @@ func (a *App) registerCategoryCommands() {
 				return err
 			}
 
-			data, err := ctx.Client.GetMonthCategory(planID, args[1], args[2])
+			data, err := a.client.GetMonthCategory(planID, args[1], args[2])
 			if err != nil {
 				return err
 			}
 
-			return ctx.Printer.PrintResult(data, nil, nil)
+			return a.printer.PrintResult(data, nil, nil)
 		},
 	}
 
-	catCmd.Subcommands["update-month"] = &Subcommand{
-		Name:        "update-month",
-		Description: "Update a category for a specific month",
-		Usage:       "<plan-id> <month> <category-id> --budgeted AMOUNT",
-		Run: func(ctx *Context, args []string) error {
-			var budgeted string
-
-			positional := []string{}
-			for i := 0; i < len(args); i++ {
-				switch {
-				case args[i] == "--budgeted" && i+1 < len(args):
-					budgeted = args[i+1]
-					i++
-				case strings.HasPrefix(args[i], "--budgeted="):
-					budgeted = strings.TrimPrefix(args[i], "--budgeted=")
-				default:
-					positional = append(positional, args[i])
-				}
-			}
-
-			if len(positional) < 3 {
+	updateMonthCmd := &cobra.Command{
+		Use:   "update-month [plan-id] <month> <category-id>",
+		Short: "Update a category for a specific month",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 3 {
 				return fmt.Errorf("usage: ynab categories update-month <plan-id> <month> <category-id> --budgeted AMOUNT")
 			}
 
-			planID, err := config.ResolvePlan(positional[0])
+			planID, err := config.ResolvePlan(args[0])
 			if err != nil {
 				return err
 			}
-			month := positional[1]
-			categoryID := positional[2]
+			month := args[1]
+			categoryID := args[2]
 
-			if budgeted == "" {
+			budgeted, _ := cmd.Flags().GetInt64("budgeted")
+			if !cmd.Flags().Changed("budgeted") {
 				return fmt.Errorf("--budgeted is required")
-			}
-
-			budgetedAmount, err := strconv.ParseInt(budgeted, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid --budgeted value: %s", budgeted)
 			}
 
 			body := map[string]interface{}{
 				"category": map[string]interface{}{
-					"budgeted": budgetedAmount,
+					"budgeted": budgeted,
 				},
 			}
 
-			data, err := ctx.Client.UpdateMonthCategory(planID, month, categoryID, body)
+			data, err := a.client.UpdateMonthCategory(planID, month, categoryID, body)
 			if err != nil {
 				return err
 			}
 
-			return ctx.Printer.PrintResult(data, nil, nil)
+			return a.printer.PrintResult(data, nil, nil)
 		},
 	}
+	updateMonthCmd.Flags().Int64("budgeted", 0, "Budgeted amount in milliunits")
 
-	a.registerCommand(catCmd)
+	catCmd.AddCommand(listCmd, getCmd, createCmd, updateCmd, getMonthCmd, updateMonthCmd)
+	a.rootCmd.AddCommand(catCmd)
 
 	// ── category-groups command ─────────────────────────────────────────
-	grpCmd := &Command{
-		Name:        "category-groups",
-		Description: "Manage category groups",
-		Subcommands: map[string]*Subcommand{},
+	grpCmd := &cobra.Command{
+		Use:   "category-groups",
+		Short: "Manage category groups",
 	}
 
-	grpCmd.Subcommands["create"] = &Subcommand{
-		Name:        "create",
-		Description: "Create a new category group",
-		Usage:       "<plan-id> --name NAME",
-		Run: func(ctx *Context, args []string) error {
-			var planExplicit string
-			var name string
-
-			positional := []string{}
-			for i := 0; i < len(args); i++ {
-				switch {
-				case args[i] == "--name" && i+1 < len(args):
-					name = args[i+1]
-					i++
-				case strings.HasPrefix(args[i], "--name="):
-					name = strings.TrimPrefix(args[i], "--name=")
-				default:
-					positional = append(positional, args[i])
-				}
+	grpCreateCmd := &cobra.Command{
+		Use:   "create [plan-id]",
+		Short: "Create a new category group",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var planIDArg string
+			if len(args) > 0 {
+				planIDArg = args[0]
 			}
 
-			if len(positional) > 0 {
-				planExplicit = positional[0]
-			}
-
-			planID, err := config.ResolvePlan(planExplicit)
+			planID, err := config.ResolvePlan(planIDArg)
 			if err != nil {
 				return err
 			}
 
+			name, _ := cmd.Flags().GetString("name")
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
@@ -337,49 +241,32 @@ func (a *App) registerCategoryCommands() {
 				},
 			}
 
-			data, err := ctx.Client.CreateCategoryGroup(planID, body)
+			data, err := a.client.CreateCategoryGroup(planID, body)
 			if err != nil {
 				return err
 			}
 
-			return ctx.Printer.PrintResult(data, nil, nil)
+			return a.printer.PrintResult(data, nil, nil)
 		},
 	}
+	grpCreateCmd.Flags().String("name", "", "Category group name")
 
-	grpCmd.Subcommands["update"] = &Subcommand{
-		Name:        "update",
-		Description: "Update a category group",
-		Usage:       "<plan-id> <group-id> [--name NAME]",
-		Run: func(ctx *Context, args []string) error {
-			var name string
-			nameSet := false
-
-			positional := []string{}
-			for i := 0; i < len(args); i++ {
-				switch {
-				case args[i] == "--name" && i+1 < len(args):
-					name = args[i+1]
-					nameSet = true
-					i++
-				case strings.HasPrefix(args[i], "--name="):
-					name = strings.TrimPrefix(args[i], "--name=")
-					nameSet = true
-				default:
-					positional = append(positional, args[i])
-				}
+	grpUpdateCmd := &cobra.Command{
+		Use:   "update [plan-id] <group-id>",
+		Short: "Update a category group",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 2 {
+				return fmt.Errorf("usage: ynab category-groups update <plan-id> <group-id> --name NAME")
 			}
 
-			if len(positional) < 2 {
-				return fmt.Errorf("usage: ynab category-groups update <plan-id> <group-id> [--name NAME]")
-			}
-
-			planID, err := config.ResolvePlan(positional[0])
+			planID, err := config.ResolvePlan(args[0])
 			if err != nil {
 				return err
 			}
-			groupID := positional[1]
+			groupID := args[1]
 
-			if !nameSet {
+			name, _ := cmd.Flags().GetString("name")
+			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
 
@@ -389,16 +276,18 @@ func (a *App) registerCategoryCommands() {
 				},
 			}
 
-			data, err := ctx.Client.UpdateCategoryGroup(planID, groupID, body)
+			data, err := a.client.UpdateCategoryGroup(planID, groupID, body)
 			if err != nil {
 				return err
 			}
 
-			return ctx.Printer.PrintResult(data, nil, nil)
+			return a.printer.PrintResult(data, nil, nil)
 		},
 	}
+	grpUpdateCmd.Flags().String("name", "", "Category group name")
 
-	a.registerCommand(grpCmd)
+	grpCmd.AddCommand(grpCreateCmd, grpUpdateCmd)
+	a.rootCmd.AddCommand(grpCmd)
 }
 
 // extractCategoryRows parses the YNAB categories response and returns rows

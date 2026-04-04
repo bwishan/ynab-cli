@@ -5,7 +5,7 @@ An agent-friendly command-line interface for the [YNAB (You Need A Budget) API](
 ## Features
 
 - **Full YNAB API v1 coverage** — plans, accounts, categories, transactions, payees, scheduled transactions, months, money movements
-- **Zero external dependencies** — built entirely on Go's standard library for maximum security and auditability
+- **Minimal dependencies** — only [cobra](https://github.com/spf13/cobra) for CLI parsing; the API client and output layer use only Go's standard library
 - **Agent-friendly** — JSON output by default, consistent error codes, structured responses
 - **Multiple output formats** — JSON (default), table, CSV
 - **Cross-platform** — pre-built binaries for Linux, macOS, and Windows (amd64/arm64)
@@ -13,9 +13,9 @@ An agent-friendly command-line interface for the [YNAB (You Need A Budget) API](
 
 ## Security
 
-This tool handles financial data. We take a zero-trust approach to dependencies:
+This tool handles financial data. We take a security-conscious approach:
 
-- **0 external Go modules** — the entire codebase uses only Go's standard library
+- **Minimal dependencies** — only cobra/pflag for CLI parsing; the API client uses only Go's standard library
 - **Tokens never logged** — access tokens are only sent in HTTP Authorization headers
 - **Config file permissions** — stored with `0600` permissions in `~/.config/ynab-cli/`
 - **Auditable** — small, readable codebase you can verify yourself

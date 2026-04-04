@@ -1,4 +1,4 @@
-// Package api provides a zero-dependency HTTP client for the YNAB API v1.
+// Package api provides an HTTP client for the YNAB API v1 using only Go's standard library.
 package api
 
 import (
@@ -17,7 +17,7 @@ const (
 )
 
 // Client is the YNAB API client. It handles authentication, rate limiting,
-// and response parsing with zero external dependencies.
+// and response parsing using only Go's standard library.
 type Client struct {
 	token      string
 	baseURL    string
