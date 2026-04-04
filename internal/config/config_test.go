@@ -186,6 +186,19 @@ func TestDefaultSyncDBPath(t *testing.T) {
 	}
 }
 
+func TestDefaultSyncDBPath_FilenameIsTransactionsDB(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	path, err := DefaultSyncDBPath()
+	if err != nil {
+		t.Fatalf("DefaultSyncDBPath returned error: %v", err)
+	}
+	if filepath.Base(path) != "transactions.db" {
+		t.Errorf("expected filename transactions.db, got %q", filepath.Base(path))
+	}
+}
+
 func containsPath(path, segment string) bool {
 	for _, part := range splitPath(path) {
 		if part == segment {
