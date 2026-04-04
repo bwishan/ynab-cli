@@ -1,6 +1,40 @@
+# Build output
 bin/
+dist/
+
+# Go build artifacts
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 *.test
 *.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency directories (if vendoring is not committed)
+# vendor/
+
+# Project config and secrets
 .env
+.env.*
 config.json
+
+# Test and coverage
+cover.out
+coverage.html
+*.prof
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
