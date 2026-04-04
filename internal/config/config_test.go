@@ -168,3 +168,56 @@ func TestLoad_ReturnsEmptyWhenFileDoesNotExist(t *testing.T) {
 		t.Errorf("expected empty config, got: %+v", cfg)
 	}
 }
+
+func TestDefaultSyncDBPath(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	path, err := DefaultSyncDBPath()
+	if err != nil {
+		t.Fatalf("DefaultSyncDBPath returned error: %v", err)
+	}
+	if path == "" {
+		t.Error("expected non-empty default sync DB path")
+	}
+	// Should be inside the ynab-cli config dir.
+	if !containsPath(path, "ynab-cli") {
+		t.Errorf("expected path inside ynab-cli dir, got: %q", path)
+	}
+}
+
+func containsPath(path, segment string) bool {
+	for _, part := range splitPath(path) {
+		if part == segment {
+			return true
+		}
+	}
+	return false
+}
+
+func splitPath(path string) []string {
+	var parts []string
+	for path != "" {
+		dir, file := splitLast(path)
+		if file != "" {
+			parts = append(parts, file)
+		}
+		if dir == path {
+			break
+		}
+		path = dir
+	}
+	return parts
+}
+
+func splitLast(path string) (string, string) {
+	i := len(path) - 1
+	for i >= 0 && path[i] == '/' {
+		i--
+	}
+	j := i
+	for j >= 0 && path[j] != '/' {
+		j--
+	}
+	return path[:j+1], path[j+1 : i+1]
+}

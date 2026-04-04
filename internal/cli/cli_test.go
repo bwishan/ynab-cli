@@ -122,7 +122,50 @@ func TestAppRun_TransactionSyncFlagsConflict(t *testing.T) {
 	}
 }
 
-// TestGlobalFlagsAfterCommand tests that global flags work after the command (the bug fix).
+// TestAppRun_TransactionSyncStatusNoToken verifies that sync-status works without an API token.
+func TestAppRun_TransactionSyncStatusNoToken(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("YNAB_ACCESS_TOKEN", "")
+	t.Setenv("YNAB_PLAN_ID", "plan-test")
+
+	app := New("1.0.0", "abc", "2024-01-01")
+	err := app.Run([]string{"transactions", "sync-status"})
+	// Should succeed (no token required for local-only commands).
+	if err != nil {
+		t.Errorf("sync-status returned error: %v", err)
+	}
+}
+
+// TestAppRun_TransactionSearchNoToken verifies that search works without an API token.
+func TestAppRun_TransactionSearchNoToken(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("YNAB_ACCESS_TOKEN", "")
+	t.Setenv("YNAB_PLAN_ID", "plan-test")
+
+	app := New("1.0.0", "abc", "2024-01-01")
+	err := app.Run([]string{"transactions", "search", "--since-date", "2024-01-01"})
+	if err != nil {
+		t.Errorf("search returned error: %v", err)
+	}
+}
+
+// TestAppRun_TransactionSyncStatusTableOutput verifies table output format.
+func TestAppRun_TransactionSyncStatusTableOutput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("YNAB_ACCESS_TOKEN", "")
+	t.Setenv("YNAB_PLAN_ID", "plan-test")
+
+	app := New("1.0.0", "abc", "2024-01-01")
+	err := app.Run([]string{"--output", "table", "transactions", "sync-status"})
+	if err != nil {
+		t.Errorf("sync-status table returned error: %v", err)
+	}
+}
+
+
 func TestGlobalFlagsAfterCommand(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("YNAB_ACCESS_TOKEN", "")

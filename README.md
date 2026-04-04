@@ -219,28 +219,64 @@ The YNAB API allows 200 requests per hour per access token. The CLI returns a cl
 
 ## Local Transaction Sync Cache
 
-When enabled, transaction reads can use a local SQLite cache instead of always pulling the full list from YNAB.
+When enabled, transaction reads use a local SQLite cache instead of always pulling the full list from YNAB. The cache is updated incrementally using YNAB's `server_knowledge` delta-sync mechanism, so subsequent syncs only transfer changed data.
 
-### Recommended flow
+### Enable sync mode
 
 ```bash
-# Enable remembered sync mode once
+# Enable and use the default DB (~/.config/ynab-cli/transactions.db)
 ynab configure --transaction-sync
 
-# Normal transaction reads will delta-sync first, then read from the cache
+# Enable with a custom DB path
+ynab configure --transaction-sync --transaction-sync-db ~/my-ynab.db
+
+# Disable
+ynab configure --transaction-sync-off
+```
+
+### Recommended workflow
+
+```bash
+# Enable sync once
+ynab configure --transaction-sync
+
+# Normal transaction reads: delta-sync first, then serve from cache
 ynab transactions list <plan-id>
 ynab transactions get <plan-id> <transaction-id>
 
-# Explicit maintenance / inspection
+# Explicit sync (useful in scripts/cron)
 ynab transactions sync <plan-id>
+
+# Inspect cache health
 ynab transactions sync-status <plan-id>
-ynab transactions search <plan-id> --memo coffee --limit 20
+ynab transactions sync-status <plan-id> --output table
+
+# Rich local search (no API call; no token required)
+ynab transactions search <plan-id> --memo coffee
+ynab transactions search <plan-id> --since-date 2024-01-01 --before-date 2024-03-31
+ynab transactions search <plan-id> --type uncategorized --limit 50
+ynab transactions search <plan-id> --account-id <id>
+ynab transactions search <plan-id> --category-id <id>
+ynab transactions search <plan-id> --payee-id <id>
+ynab transactions search <plan-id> --output csv > transactions.csv
 ```
 
-Notes:
-- The cache uses YNAB `server_knowledge` to fetch only changed transactions on subsequent syncs.
-- Cached queries currently cover `transactions list`, `transactions get`, and `transactions search`.
-- Existing behavior stays API-first unless sync mode is enabled or per-command sync flags are used.
+### Per-command flags
+
+Every `transactions` subcommand that touches the cache also accepts inline sync flags to override the remembered setting:
+
+| Flag | Description |
+|------|-------------|
+| `--transaction-sync` | Enable sync mode for this invocation |
+| `--transaction-sync-off` | Disable sync mode for this invocation |
+| `--transaction-sync-db <path>` | Use a custom SQLite path for this invocation |
+
+### Notes
+
+- `sync-status` and `search` are **local-only** — they never contact YNAB and work without an API token.
+- The cache stores all fields returned by YNAB including raw JSON, so JSON output reflects the original API payload.
+- YNAB deleted transactions are soft-deleted in the cache (marked `deleted=1`) and excluded from results.
+- Default DB path: `~/.config/ynab-cli/transactions.db` (WAL mode, safe for concurrent reads).
 
 ## Agent Integration
 
