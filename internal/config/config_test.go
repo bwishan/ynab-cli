@@ -127,8 +127,10 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 	t.Setenv("HOME", tmp)
 
 	cfg := &Config{
-		AccessToken: "my-token-123",
-		DefaultPlan: "plan-abc",
+		AccessToken:       "my-token-123",
+		DefaultPlan:       "plan-abc",
+		TransactionSync:   true,
+		TransactionSyncDB: "/tmp/ynab-sync.db",
 	}
 
 	if err := Save(cfg); err != nil {
@@ -146,6 +148,12 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 	if loaded.DefaultPlan != cfg.DefaultPlan {
 		t.Errorf("DefaultPlan: expected %q, got %q", cfg.DefaultPlan, loaded.DefaultPlan)
 	}
+	if loaded.TransactionSync != cfg.TransactionSync {
+		t.Errorf("TransactionSync: expected %v, got %v", cfg.TransactionSync, loaded.TransactionSync)
+	}
+	if loaded.TransactionSyncDB != cfg.TransactionSyncDB {
+		t.Errorf("TransactionSyncDB: expected %q, got %q", cfg.TransactionSyncDB, loaded.TransactionSyncDB)
+	}
 }
 
 func TestLoad_ReturnsEmptyWhenFileDoesNotExist(t *testing.T) {
@@ -156,7 +164,7 @@ func TestLoad_ReturnsEmptyWhenFileDoesNotExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.AccessToken != "" || cfg.DefaultPlan != "" {
+	if cfg.AccessToken != "" || cfg.DefaultPlan != "" || cfg.TransactionSync || cfg.TransactionSyncDB != "" {
 		t.Errorf("expected empty config, got: %+v", cfg)
 	}
 }

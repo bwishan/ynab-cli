@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -8,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/bwishan/ynab-cli/internal/config"
+	syncdb "github.com/bwishan/ynab-cli/internal/sync"
 )
 
 func (a *App) registerTransactionCommands() {
@@ -22,6 +25,9 @@ func (a *App) registerTransactionCommands() {
 		Short: "List all transactions for a plan",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := a.validateTransactionSyncFlags(cmd); err != nil {
+				return err
+			}
 			var planIDArg string
 			if len(args) > 0 {
 				planIDArg = args[0]
@@ -35,6 +41,24 @@ func (a *App) registerTransactionCommands() {
 			txType, _ := cmd.Flags().GetString("type")
 			lastKnowledge, _ := cmd.Flags().GetInt64("last-knowledge")
 
+			useSync, dbPath, err := a.resolveTransactionSyncSettings(cmd)
+			if err != nil {
+				return err
+			}
+			if useSync {
+				store, err := syncdb.OpenStore(dbPath)
+				if err != nil {
+					return err
+				}
+				defer store.Close()
+
+				data, err := syncdb.SyncTransactions(context.Background(), a.client, store, planID, sinceDate, txType)
+				if err != nil {
+					return err
+				}
+				return a.printer.PrintResult(data, transactionHeaders, extractTransactionRows)
+			}
+
 			data, err := a.client.GetTransactions(planID, sinceDate, txType, lastKnowledge)
 			if err != nil {
 				return err
@@ -45,6 +69,7 @@ func (a *App) registerTransactionCommands() {
 	listCmd.Flags().String("since-date", "", "Only return transactions on or after this date (ISO 8601)")
 	listCmd.Flags().String("type", "", "Transaction type filter")
 	listCmd.Flags().Int64("last-knowledge", 0, "Server knowledge for delta sync")
+	a.addTransactionSyncFlags(listCmd)
 
 	// ── get ─────────────────────────────────────────────────────────────
 	getCmd := &cobra.Command{
@@ -52,9 +77,43 @@ func (a *App) registerTransactionCommands() {
 		Short: "Get a specific transaction",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := a.validateTransactionSyncFlags(cmd); err != nil {
+				return err
+			}
 			planID, err := config.ResolvePlan(args[0])
 			if err != nil {
 				return err
+			}
+			useSync, dbPath, err := a.resolveTransactionSyncSettings(cmd)
+			if err != nil {
+				return err
+			}
+			if useSync {
+				store, err := syncdb.OpenStore(dbPath)
+				if err != nil {
+					return err
+				}
+				defer store.Close()
+
+				data, err := store.GetTransaction(context.Background(), planID, args[1])
+				if err == nil {
+					return a.printer.PrintResult(data, transactionHeaders, extractSingleTransactionRows)
+				}
+				if err != sql.ErrNoRows {
+					return err
+				}
+
+				if _, err := syncdb.SyncTransactions(context.Background(), a.client, store, planID, "", ""); err != nil {
+					return err
+				}
+				data, err = store.GetTransaction(context.Background(), planID, args[1])
+				if err != nil {
+					if err == sql.ErrNoRows {
+						return fmt.Errorf("transaction %s not found in sync cache after refresh", args[1])
+					}
+					return err
+				}
+				return a.printer.PrintResult(data, transactionHeaders, extractSingleTransactionRows)
 			}
 			data, err := a.client.GetTransactionByID(planID, args[1])
 			if err != nil {
@@ -373,6 +432,159 @@ func (a *App) registerTransactionCommands() {
 	listByMonthCmd.Flags().String("type", "", "Transaction type filter")
 	listByMonthCmd.Flags().Int64("last-knowledge", 0, "Server knowledge for delta sync")
 
+	// ── sync ────────────────────────────────────────────────────────────
+	syncCmd := &cobra.Command{
+		Use:   "sync [plan-id]",
+		Short: "Delta-sync transactions into the local SQLite cache",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var planIDArg string
+			if len(args) > 0 {
+				planIDArg = args[0]
+			}
+			planID, err := config.ResolvePlan(planIDArg)
+			if err != nil {
+				return err
+			}
+			dbPath, err := a.requireTransactionSyncDB(cmd)
+			if err != nil {
+				return err
+			}
+			store, err := syncdb.OpenStore(dbPath)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+
+			sinceDate, _ := cmd.Flags().GetString("since-date")
+			txType, _ := cmd.Flags().GetString("type")
+			data, err := syncdb.SyncTransactions(context.Background(), a.client, store, planID, sinceDate, txType)
+			if err != nil {
+				return err
+			}
+			return a.printer.PrintResult(data, transactionHeaders, extractTransactionRows)
+		},
+	}
+	syncCmd.Flags().String("since-date", "", "Only sync transactions on or after this date (ISO 8601)")
+	syncCmd.Flags().String("type", "", "Transaction type filter")
+	a.addTransactionSyncFlags(syncCmd)
+
+	// ── sync-status ─────────────────────────────────────────────────────
+	syncStatusCmd := &cobra.Command{
+		Use:         "sync-status [plan-id]",
+		Short:       "Show transaction sync/cache status for a plan",
+		Args:        cobra.MaximumNArgs(1),
+		Annotations: map[string]string{"localOnly": "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var planIDArg string
+			if len(args) > 0 {
+				planIDArg = args[0]
+			}
+			planID, err := config.ResolvePlan(planIDArg)
+			if err != nil {
+				return err
+			}
+			dbPath, err := a.requireTransactionSyncDB(cmd)
+			if err != nil {
+				return err
+			}
+			store, err := syncdb.OpenStore(dbPath)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+
+			status, err := store.Status(context.Background(), planID, dbPath)
+			if err != nil {
+				return err
+			}
+			payload, err := json.Marshal(struct {
+				Data *syncdb.SyncStatus `json:"data"`
+			}{Data: status})
+			if err != nil {
+				return err
+			}
+			headers := []string{"PLAN_ID", "DB_PATH", "LAST_KNOWLEDGE", "LAST_SYNC_AT", "TRANSACTIONS", "DELETED"}
+			extractRows := func(data []byte) ([][]string, error) {
+				var resp struct {
+					Data syncdb.SyncStatus `json:"data"`
+				}
+				if err := json.Unmarshal(data, &resp); err != nil {
+					return nil, err
+				}
+				return [][]string{{
+					resp.Data.PlanID,
+					resp.Data.DBPath,
+					strconv.FormatInt(resp.Data.LastKnowledge, 10),
+					resp.Data.LastSyncAt.Format("2006-01-02T15:04:05Z07:00"),
+					strconv.Itoa(resp.Data.TransactionCount),
+					strconv.Itoa(resp.Data.DeletedCount),
+				}}, nil
+			}
+			return a.printer.PrintResult(payload, headers, extractRows)
+		},
+	}
+
+	// ── search ──────────────────────────────────────────────────────────
+	searchCmd := &cobra.Command{
+		Use:         "search [plan-id]",
+		Short:       "Search cached transactions in the local SQLite sync DB",
+		Args:        cobra.MaximumNArgs(1),
+		Annotations: map[string]string{"localOnly": "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var planIDArg string
+			if len(args) > 0 {
+				planIDArg = args[0]
+			}
+			planID, err := config.ResolvePlan(planIDArg)
+			if err != nil {
+				return err
+			}
+			dbPath, err := a.requireTransactionSyncDB(cmd)
+			if err != nil {
+				return err
+			}
+			store, err := syncdb.OpenStore(dbPath)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+
+			sinceDate, _ := cmd.Flags().GetString("since-date")
+			beforeDate, _ := cmd.Flags().GetString("before-date")
+			txType, _ := cmd.Flags().GetString("type")
+			accountID, _ := cmd.Flags().GetString("account-id")
+			categoryID, _ := cmd.Flags().GetString("category-id")
+			payeeID, _ := cmd.Flags().GetString("payee-id")
+			memo, _ := cmd.Flags().GetString("memo")
+			limit, _ := cmd.Flags().GetInt("limit")
+
+			data, err := store.SearchTransactions(context.Background(), planID, syncdb.SearchOptions{
+				SinceDate:  sinceDate,
+				BeforeDate: beforeDate,
+				Type:       txType,
+				AccountID:  accountID,
+				CategoryID: categoryID,
+				PayeeID:    payeeID,
+				Memo:       memo,
+				Limit:      limit,
+			})
+			if err != nil {
+				return err
+			}
+			return a.printer.PrintResult(data, transactionHeaders, extractTransactionRows)
+		},
+	}
+	searchCmd.Flags().String("since-date", "", "Only return transactions on or after this date (ISO 8601)")
+	searchCmd.Flags().String("before-date", "", "Only return transactions on or before this date (ISO 8601)")
+	searchCmd.Flags().String("type", "", "Transaction type filter")
+	searchCmd.Flags().String("account-id", "", "Filter by account ID")
+	searchCmd.Flags().String("category-id", "", "Filter by category ID")
+	searchCmd.Flags().String("payee-id", "", "Filter by payee ID")
+	searchCmd.Flags().String("memo", "", "Filter memo substring")
+	searchCmd.Flags().Int("limit", 100, "Maximum number of cached transactions to return")
+	a.addTransactionSyncFlags(searchCmd)
+
 	// ── bulk-update ─────────────────────────────────────────────────────
 	bulkUpdateCmd := &cobra.Command{
 		Use:   "bulk-update [plan-id]",
@@ -410,6 +622,7 @@ func (a *App) registerTransactionCommands() {
 	_ = bulkUpdateCmd.MarkFlagRequired("data")
 
 	txCmd.AddCommand(listCmd, getCmd, createCmd, updateCmd, deleteCmd, importCmd,
+		syncCmd, syncStatusCmd, searchCmd,
 		listByAccountCmd, listByCategoryCmd, listByPayeeCmd, listByMonthCmd, bulkUpdateCmd)
 	a.rootCmd.AddCommand(txCmd)
 }

@@ -10,6 +10,7 @@ An agent-friendly command-line interface for the [YNAB (You Need A Budget) API](
 - **Multiple output formats** — JSON (default), table, CSV
 - **Cross-platform** — pre-built binaries for Linux, macOS, and Windows (amd64/arm64)
 - **Delta sync support** — incremental data fetching via `--last-knowledge` to minimize API calls
+- **Optional local transaction cache** — SQLite-backed sync mode for lower-latency, lower-chatter transaction reads
 
 ## Security
 
@@ -72,6 +73,9 @@ Create a Personal Access Token at [YNAB Developer Settings](https://app.ynab.com
 # Option A: Save to config file
 ynab configure --token <your-access-token>
 
+# Enable remembered local transaction sync/cache mode
+ynab configure --transaction-sync --transaction-sync-db ~/.config/ynab-cli/transactions.db
+
 # Option B: Environment variable
 export YNAB_ACCESS_TOKEN=<your-access-token>
 
@@ -105,6 +109,8 @@ ynab [global-flags] <command> <subcommand> [arguments]
 | `--version` | Print version |
 | `--help` | Print help |
 
+`ynab configure` also supports remembered transaction sync settings via `--transaction-sync`, `--transaction-sync-off`, and `--transaction-sync-db`.
+
 ### Commands
 
 | Command | Description |
@@ -134,6 +140,12 @@ ynab accounts list <plan-id> --output table
 
 # Get all transactions since a date
 ynab transactions list <plan-id> --since-date 2024-01-01
+
+# Sync transactions into the local SQLite cache
+ynab transactions sync <plan-id>
+
+# Search cached transactions locally
+ynab transactions search <plan-id> --memo coffee --since-date 2024-01-01
 
 # Create a transaction (amounts in milliunits: $50.00 = 50000)
 ynab transactions create <plan-id> \
@@ -204,6 +216,31 @@ ynab transactions list <plan-id> --last-knowledge 500
 ### Rate Limiting
 
 The YNAB API allows 200 requests per hour per access token. The CLI returns a clear error when the limit is hit (HTTP 429).
+
+## Local Transaction Sync Cache
+
+When enabled, transaction reads can use a local SQLite cache instead of always pulling the full list from YNAB.
+
+### Recommended flow
+
+```bash
+# Enable remembered sync mode once
+ynab configure --transaction-sync
+
+# Normal transaction reads will delta-sync first, then read from the cache
+ynab transactions list <plan-id>
+ynab transactions get <plan-id> <transaction-id>
+
+# Explicit maintenance / inspection
+ynab transactions sync <plan-id>
+ynab transactions sync-status <plan-id>
+ynab transactions search <plan-id> --memo coffee --limit 20
+```
+
+Notes:
+- The cache uses YNAB `server_knowledge` to fetch only changed transactions on subsequent syncs.
+- Cached queries currently cover `transactions list`, `transactions get`, and `transactions search`.
+- Existing behavior stays API-first unless sync mode is enabled or per-command sync flags are used.
 
 ## Agent Integration
 
