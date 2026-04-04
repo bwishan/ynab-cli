@@ -10,6 +10,7 @@ An agent-friendly command-line interface for the [YNAB (You Need A Budget) API](
 - **Multiple output formats** — JSON (default), table, CSV
 - **Cross-platform** — pre-built binaries for Linux, macOS, and Windows (amd64/arm64)
 - **Delta sync support** — incremental data fetching via `--last-knowledge` to minimize API calls
+- **Optional local transaction cache** — SQLite-backed sync mode for lower-latency, lower-chatter transaction reads
 
 ## Security
 
@@ -72,6 +73,9 @@ Create a Personal Access Token at [YNAB Developer Settings](https://app.ynab.com
 # Option A: Save to config file
 ynab configure --token <your-access-token>
 
+# Enable remembered local transaction sync/cache mode
+ynab configure --transaction-sync --transaction-sync-db ~/.config/ynab-cli/transactions.db
+
 # Option B: Environment variable
 export YNAB_ACCESS_TOKEN=<your-access-token>
 
@@ -105,6 +109,8 @@ ynab [global-flags] <command> <subcommand> [arguments]
 | `--version` | Print version |
 | `--help` | Print help |
 
+`ynab configure` also supports remembered transaction sync settings via `--transaction-sync`, `--transaction-sync-off`, and `--transaction-sync-db`.
+
 ### Commands
 
 | Command | Description |
@@ -134,6 +140,12 @@ ynab accounts list <plan-id> --output table
 
 # Get all transactions since a date
 ynab transactions list <plan-id> --since-date 2024-01-01
+
+# Sync transactions into the local SQLite cache
+ynab transactions sync <plan-id>
+
+# Search cached transactions locally
+ynab transactions search <plan-id> --memo coffee --since-date 2024-01-01
 
 # Create a transaction (amounts in milliunits: $50.00 = 50000)
 ynab transactions create <plan-id> \
@@ -204,6 +216,67 @@ ynab transactions list <plan-id> --last-knowledge 500
 ### Rate Limiting
 
 The YNAB API allows 200 requests per hour per access token. The CLI returns a clear error when the limit is hit (HTTP 429).
+
+## Local Transaction Sync Cache
+
+When enabled, transaction reads use a local SQLite cache instead of always pulling the full list from YNAB. The cache is updated incrementally using YNAB's `server_knowledge` delta-sync mechanism, so subsequent syncs only transfer changed data.
+
+### Enable sync mode
+
+```bash
+# Enable and use the default DB (~/.config/ynab-cli/transactions.db)
+ynab configure --transaction-sync
+
+# Enable with a custom DB path
+ynab configure --transaction-sync --transaction-sync-db ~/my-ynab.db
+
+# Disable
+ynab configure --transaction-sync-off
+```
+
+### Recommended workflow
+
+```bash
+# Enable sync once
+ynab configure --transaction-sync
+
+# Normal transaction reads: delta-sync first, then serve from cache
+ynab transactions list <plan-id>
+ynab transactions get <plan-id> <transaction-id>
+
+# Explicit sync (useful in scripts/cron)
+ynab transactions sync <plan-id>
+
+# Inspect cache health
+ynab transactions sync-status <plan-id>
+ynab transactions sync-status <plan-id> --output table
+
+# Rich local search (no API call; no token required)
+ynab transactions search <plan-id> --memo coffee
+ynab transactions search <plan-id> --since-date 2024-01-01 --before-date 2024-03-31
+ynab transactions search <plan-id> --type uncategorized --limit 50
+ynab transactions search <plan-id> --account-id <id>
+ynab transactions search <plan-id> --category-id <id>
+ynab transactions search <plan-id> --payee-id <id>
+ynab transactions search <plan-id> --output csv > transactions.csv
+```
+
+### Per-command flags
+
+Every `transactions` subcommand that touches the cache also accepts inline sync flags to override the remembered setting:
+
+| Flag | Description |
+|------|-------------|
+| `--transaction-sync` | Enable sync mode for this invocation |
+| `--transaction-sync-off` | Disable sync mode for this invocation |
+| `--transaction-sync-db <path>` | Use a custom SQLite path for this invocation |
+
+### Notes
+
+- `sync-status` and `search` are **local-only** — they never contact YNAB and work without an API token.
+- The cache stores all fields returned by YNAB including raw JSON, so JSON output reflects the original API payload.
+- YNAB deleted transactions are soft-deleted in the cache (marked `deleted=1`) and excluded from results.
+- Default DB path: `~/.config/ynab-cli/transactions.db` (WAL mode, safe for concurrent reads).
 
 ## Agent Integration
 

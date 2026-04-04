@@ -10,8 +10,10 @@ import (
 
 // Config holds the CLI configuration.
 type Config struct {
-	AccessToken string `json:"access_token"`
-	DefaultPlan string `json:"default_plan,omitempty"`
+	AccessToken       string `json:"access_token"`
+	DefaultPlan       string `json:"default_plan,omitempty"`
+	TransactionSync   bool   `json:"transaction_sync,omitempty"`
+	TransactionSyncDB string `json:"transaction_sync_db,omitempty"`
 }
 
 // configDir returns the config directory path.
@@ -30,6 +32,15 @@ func configPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "config.json"), nil
+}
+
+// DefaultSyncDBPath returns the default SQLite path used for transaction sync.
+func DefaultSyncDBPath() (string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "transactions.db"), nil
 }
 
 // Load reads the config from disk. Returns an empty config if the file doesn't exist.

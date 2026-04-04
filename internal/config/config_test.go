@@ -127,8 +127,10 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 	t.Setenv("HOME", tmp)
 
 	cfg := &Config{
-		AccessToken: "my-token-123",
-		DefaultPlan: "plan-abc",
+		AccessToken:       "my-token-123",
+		DefaultPlan:       "plan-abc",
+		TransactionSync:   true,
+		TransactionSyncDB: "/tmp/ynab-sync.db",
 	}
 
 	if err := Save(cfg); err != nil {
@@ -146,6 +148,12 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 	if loaded.DefaultPlan != cfg.DefaultPlan {
 		t.Errorf("DefaultPlan: expected %q, got %q", cfg.DefaultPlan, loaded.DefaultPlan)
 	}
+	if loaded.TransactionSync != cfg.TransactionSync {
+		t.Errorf("TransactionSync: expected %v, got %v", cfg.TransactionSync, loaded.TransactionSync)
+	}
+	if loaded.TransactionSyncDB != cfg.TransactionSyncDB {
+		t.Errorf("TransactionSyncDB: expected %q, got %q", cfg.TransactionSyncDB, loaded.TransactionSyncDB)
+	}
 }
 
 func TestLoad_ReturnsEmptyWhenFileDoesNotExist(t *testing.T) {
@@ -156,7 +164,73 @@ func TestLoad_ReturnsEmptyWhenFileDoesNotExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.AccessToken != "" || cfg.DefaultPlan != "" {
+	if cfg.AccessToken != "" || cfg.DefaultPlan != "" || cfg.TransactionSync || cfg.TransactionSyncDB != "" {
 		t.Errorf("expected empty config, got: %+v", cfg)
 	}
+}
+
+func TestDefaultSyncDBPath(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	path, err := DefaultSyncDBPath()
+	if err != nil {
+		t.Fatalf("DefaultSyncDBPath returned error: %v", err)
+	}
+	if path == "" {
+		t.Error("expected non-empty default sync DB path")
+	}
+	// Should be inside the ynab-cli config dir.
+	if !containsPath(path, "ynab-cli") {
+		t.Errorf("expected path inside ynab-cli dir, got: %q", path)
+	}
+}
+
+func TestDefaultSyncDBPath_FilenameIsTransactionsDB(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	path, err := DefaultSyncDBPath()
+	if err != nil {
+		t.Fatalf("DefaultSyncDBPath returned error: %v", err)
+	}
+	if filepath.Base(path) != "transactions.db" {
+		t.Errorf("expected filename transactions.db, got %q", filepath.Base(path))
+	}
+}
+
+func containsPath(path, segment string) bool {
+	for _, part := range splitPath(path) {
+		if part == segment {
+			return true
+		}
+	}
+	return false
+}
+
+func splitPath(path string) []string {
+	var parts []string
+	for path != "" {
+		dir, file := splitLast(path)
+		if file != "" {
+			parts = append(parts, file)
+		}
+		if dir == path {
+			break
+		}
+		path = dir
+	}
+	return parts
+}
+
+func splitLast(path string) (string, string) {
+	i := len(path) - 1
+	for i >= 0 && path[i] == '/' {
+		i--
+	}
+	j := i
+	for j >= 0 && path[j] != '/' {
+		j--
+	}
+	return path[:j+1], path[j+1 : i+1]
 }

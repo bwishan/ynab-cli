@@ -79,12 +79,15 @@ Budgeted amounts are in milliunits.
 
 | Subcommand | Usage | Description |
 |------------|-------|-------------|
-| `list` | `ynab transactions list <plan-id> [--since-date DATE] [--type TYPE] [--last-knowledge N]` | List transactions |
-| `get` | `ynab transactions get <plan-id> <transaction-id>` | Get a specific transaction |
+| `list` | `ynab transactions list <plan-id> [--since-date DATE] [--type TYPE] [--last-knowledge N] [--transaction-sync] [--transaction-sync-db PATH]` | List transactions |
+| `get` | `ynab transactions get <plan-id> <transaction-id> [--transaction-sync] [--transaction-sync-db PATH]` | Get a specific transaction |
 | `create` | `ynab transactions create <plan-id> --account-id <id> --date <date> --amount <milliunits> [flags]` | Create a transaction |
 | `update` | `ynab transactions update <plan-id> <transaction-id> [flags]` | Update a transaction |
 | `delete` | `ynab transactions delete <plan-id> <transaction-id>` | Delete a transaction |
 | `import` | `ynab transactions import <plan-id>` | Import linked account transactions |
+| `sync` | `ynab transactions sync <plan-id> [--since-date DATE] [--type TYPE] [--transaction-sync-db PATH]` | Delta-sync transactions into the local SQLite cache |
+| `sync-status` | `ynab transactions sync-status <plan-id> [--transaction-sync-db PATH]` | Show cache sync status |
+| `search` | `ynab transactions search <plan-id> [--since-date DATE] [--before-date DATE] [--type TYPE] [--account-id ID] [--category-id ID] [--payee-id ID] [--memo TEXT] [--limit N] [--transaction-sync-db PATH]` | Search cached transactions locally |
 | `list-by-account` | `ynab transactions list-by-account <plan-id> <account-id> [--since-date DATE] [--type TYPE] [--last-knowledge N]` | Transactions by account |
 | `list-by-category` | `ynab transactions list-by-category <plan-id> <category-id> [--since-date DATE] [--type TYPE] [--last-knowledge N]` | Transactions by category |
 | `list-by-payee` | `ynab transactions list-by-payee <plan-id> <payee-id> [--since-date DATE] [--type TYPE] [--last-knowledge N]` | Transactions by payee |
@@ -182,10 +185,15 @@ Month format: `YYYY-MM-DD` (first of month).
 ## configure
 
 ```bash
-ynab configure --token <access-token> [--default-plan <plan-id>]
+ynab configure --token <access-token> [--default-plan <plan-id>] [--transaction-sync] [--transaction-sync-off] [--transaction-sync-db <path>]
 ```
 
 Saves configuration to `~/.config/ynab-cli/config.json` with `0600` permissions.
+
+Transaction sync notes:
+- `--transaction-sync` enables remembered local SQLite-backed sync/cache mode
+- `--transaction-sync-off` disables remembered sync mode
+- `--transaction-sync-db` sets the SQLite database path used for cached transactions
 
 ## Installation by Platform
 

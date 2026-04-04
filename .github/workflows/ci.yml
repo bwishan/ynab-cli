@@ -29,8 +29,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test
-        run: go test -race -coverprofile=coverage.out ./...
+      - name: Test internal packages with coverage
+        run: go test -race -coverprofile=coverage.out ./internal/...
+
+      - name: Test command package
+        run: go test -race ./cmd/...
 
       - name: Build
         run: make build
