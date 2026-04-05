@@ -28,9 +28,14 @@ type Printer struct {
 
 // NewPrinter creates a new Printer writing to stdout.
 func NewPrinter(format Format, pretty bool) *Printer {
+	return NewPrinterWithWriter(format, pretty, os.Stdout)
+}
+
+// NewPrinterWithWriter creates a new Printer writing to the given writer.
+func NewPrinterWithWriter(format Format, pretty bool, w io.Writer) *Printer {
 	return &Printer{
 		Format: format,
-		Writer: os.Stdout,
+		Writer: w,
 		Pretty: pretty,
 	}
 }
