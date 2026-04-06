@@ -173,7 +173,7 @@ func (a *App) registerScheduledCommands() {
 
 			fields := map[string]interface{}{
 				"account_id": accountID,
-				"date_first": date,
+				"date": date,
 				"amount":     amount,
 				"frequency":  frequency,
 			}
@@ -203,8 +203,8 @@ func (a *App) registerScheduledCommands() {
 	}
 	createCmd.Flags().String("account-id", "", "Account ID (required)")
 	createCmd.Flags().String("date", "", "First occurrence date (required)")
-	createCmd.Flags().Int64("amount", 0, "Amount in milliunits (required)")
-	createCmd.Flags().String("frequency", "", "Recurrence frequency (required)")
+	createCmd.Flags().Int64("amount", 0, "Amount in milliunits, negative for outflows (required)")
+	createCmd.Flags().String("frequency", "", "Recurrence frequency: never, daily, weekly, everyOtherWeek, twiceAMonth, every4Weeks, monthly, everyOtherMonth, every3Months, every4Months, twiceAYear, yearly, everyOtherYear (required)")
 	createCmd.Flags().String("payee-id", "", "Payee ID")
 	createCmd.Flags().String("category-id", "", "Category ID")
 	createCmd.Flags().String("memo", "", "Memo")
@@ -246,7 +246,7 @@ func (a *App) registerScheduledCommands() {
 				fields["account_id"] = accountID
 			}
 			if cmd.Flags().Changed("date") {
-				fields["date_first"] = date
+				fields["date"] = date
 			}
 			if cmd.Flags().Changed("amount") {
 				fields["amount"] = amount
@@ -284,8 +284,8 @@ func (a *App) registerScheduledCommands() {
 	}
 	updateCmd.Flags().String("account-id", "", "Account ID")
 	updateCmd.Flags().String("date", "", "First occurrence date")
-	updateCmd.Flags().Int64("amount", 0, "Amount in milliunits")
-	updateCmd.Flags().String("frequency", "", "Recurrence frequency")
+	updateCmd.Flags().Int64("amount", 0, "Amount in milliunits, negative for outflows")
+	updateCmd.Flags().String("frequency", "", "Recurrence frequency: never, daily, weekly, everyOtherWeek, twiceAMonth, every4Weeks, monthly, everyOtherMonth, every3Months, every4Months, twiceAYear, yearly, everyOtherYear")
 	updateCmd.Flags().String("payee-id", "", "Payee ID")
 	updateCmd.Flags().String("category-id", "", "Category ID")
 	updateCmd.Flags().String("memo", "", "Memo")
