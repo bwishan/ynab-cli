@@ -10,6 +10,7 @@ An agent-friendly command-line interface for the [YNAB (You Need A Budget) API](
 - **Multiple output formats** — JSON (default), table, CSV
 - **Cross-platform** — pre-built binaries for Linux, macOS, and Windows (amd64/arm64)
 - **Delta sync support** — incremental data fetching via `--last-knowledge` to minimize API calls
+- **MCP server mode** — built-in [Model Context Protocol](https://modelcontextprotocol.io) server for AI agent integration via stdio or HTTP
 
 ## Security
 
@@ -165,7 +166,7 @@ ynab scheduled create <plan-id> \
   --date 2024-04-01 \
   --amount -100000 \
   --frequency monthly \
-  --payee-name "Electric Company" \
+  --payee-id <payee-id> \
   --category-id <id>
 ```
 
@@ -204,6 +205,38 @@ ynab transactions list <plan-id> --last-knowledge 500
 ### Rate Limiting
 
 The YNAB API allows 200 requests per hour per access token. The CLI returns a clear error when the limit is hit (HTTP 429).
+
+## MCP Server Mode
+
+The CLI includes a built-in [Model Context Protocol](https://modelcontextprotocol.io) server, exposing two tools (`search_commands` and `run_command`) that let AI agents discover and execute any CLI command programmatically.
+
+```bash
+# stdio transport (default) — for Claude Code, Cursor, etc.
+ynab mcp serve
+
+# HTTP transport — for remote or multi-client setups
+ynab mcp serve --transport http --port 8080
+```
+
+### Claude Code configuration
+
+Add to your MCP settings (`.claude/settings.json` or project config):
+
+```json
+{
+  "mcpServers": {
+    "ynab": {
+      "command": "ynab",
+      "args": ["mcp", "serve"],
+      "env": {
+        "YNAB_ACCESS_TOKEN": "<your-token>"
+      }
+    }
+  }
+}
+```
+
+The agent can then call `search_commands` to discover available commands and `run_command` to execute them — no shell access needed.
 
 ## Agent Integration
 

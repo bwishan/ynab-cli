@@ -204,7 +204,7 @@ func (a *App) registerScheduledCommands() {
 	createCmd.Flags().String("account-id", "", "Account ID (required)")
 	createCmd.Flags().String("date", "", "First occurrence date (required)")
 	createCmd.Flags().Int64("amount", 0, "Amount in milliunits, negative for outflows (required)")
-	createCmd.Flags().String("frequency", "", "Recurrence frequency: never, daily, weekly, everyOtherWeek, twiceAMonth, every4Weeks, monthly, everyOtherMonth, every3Months, every4Months, twiceAYear, yearly, everyOtherYear (required)")
+	createCmd.Flags().String("frequency", "", "Recurrence frequency: "+frequencyList+" (required)")
 	createCmd.Flags().String("payee-id", "", "Payee ID")
 	createCmd.Flags().String("category-id", "", "Category ID")
 	createCmd.Flags().String("memo", "", "Memo")
@@ -285,7 +285,7 @@ func (a *App) registerScheduledCommands() {
 	updateCmd.Flags().String("account-id", "", "Account ID")
 	updateCmd.Flags().String("date", "", "First occurrence date")
 	updateCmd.Flags().Int64("amount", 0, "Amount in milliunits, negative for outflows")
-	updateCmd.Flags().String("frequency", "", "Recurrence frequency: never, daily, weekly, everyOtherWeek, twiceAMonth, every4Weeks, monthly, everyOtherMonth, every3Months, every4Months, twiceAYear, yearly, everyOtherYear")
+	updateCmd.Flags().String("frequency", "", "Recurrence frequency: "+frequencyList)
 	updateCmd.Flags().String("payee-id", "", "Payee ID")
 	updateCmd.Flags().String("category-id", "", "Category ID")
 	updateCmd.Flags().String("memo", "", "Memo")
@@ -313,6 +313,8 @@ func (a *App) registerScheduledCommands() {
 	a.rootCmd.AddCommand(schedCmd)
 }
 
+const frequencyList = "never, daily, weekly, everyOtherWeek, twiceAMonth, every4Weeks, monthly, everyOtherMonth, every3Months, every4Months, twiceAYear, yearly, everyOtherYear"
+
 var validFrequencies = map[string]bool{
 	"never":          true,
 	"daily":          true,
@@ -331,7 +333,7 @@ var validFrequencies = map[string]bool{
 
 func validateFrequency(freq string) error {
 	if !validFrequencies[freq] {
-		return fmt.Errorf("invalid frequency %q; valid values: never, daily, weekly, everyOtherWeek, twiceAMonth, every4Weeks, monthly, everyOtherMonth, every3Months, every4Months, twiceAYear, yearly, everyOtherYear", freq)
+		return fmt.Errorf("invalid frequency %q; valid values: %s", freq, frequencyList)
 	}
 	return nil
 }

@@ -272,122 +272,35 @@ t.Errorf("amount = %v", txObj["amount"])
 }
 }
 
-// TestScheduledCreateBodyFieldNames verifies that scheduled create uses "date"
-// (not "date_first") as the field name, matching the YNAB API's expected input.
-// The API returns "date_first" in responses, but expects "date" for create/update.
-func TestScheduledCreateBodyFieldNames(t *testing.T) {
-fields := map[string]interface{}{
-"account_id": "acc-1",
-"date":       "2024-04-01",
-"amount":     int64(-100000),
-"frequency":  "monthly",
-}
-body := map[string]interface{}{"scheduled_transaction": fields}
-
-b, err := json.Marshal(body)
-if err != nil {
-t.Fatal(err)
-}
-
-var parsed map[string]interface{}
-json.Unmarshal(b, &parsed)
-
-stObj, ok := parsed["scheduled_transaction"].(map[string]interface{})
-if !ok {
-t.Fatal("missing scheduled_transaction key")
-}
-
-// The API expects "date", not "date_first", for create requests.
-if _, exists := stObj["date_first"]; exists {
-t.Error("body contains 'date_first' — the YNAB API expects 'date' for create requests")
-}
-if stObj["date"] != "2024-04-01" {
-t.Errorf("date = %v, want 2024-04-01", stObj["date"])
-}
-if stObj["account_id"] != "acc-1" {
-t.Errorf("account_id = %v", stObj["account_id"])
-}
-if stObj["amount"].(float64) != -100000 {
-t.Errorf("amount = %v", stObj["amount"])
-}
-if stObj["frequency"] != "monthly" {
-t.Errorf("frequency = %v", stObj["frequency"])
-}
-}
-
-// TestScheduledUpdateBodyFieldNames verifies that scheduled update also uses
-// "date" (not "date_first") for the date field.
-func TestScheduledUpdateBodyFieldNames(t *testing.T) {
-fields := map[string]interface{}{
-"date": "2024-05-01",
-}
-body := map[string]interface{}{"scheduled_transaction": fields}
-
-b, err := json.Marshal(body)
-if err != nil {
-t.Fatal(err)
-}
-
-var parsed map[string]interface{}
-json.Unmarshal(b, &parsed)
-
-stObj, ok := parsed["scheduled_transaction"].(map[string]interface{})
-if !ok {
-t.Fatal("missing scheduled_transaction key")
-}
-
-if _, exists := stObj["date_first"]; exists {
-t.Error("body contains 'date_first' — the YNAB API expects 'date' for update requests")
-}
-if stObj["date"] != "2024-05-01" {
-t.Errorf("date = %v, want 2024-05-01", stObj["date"])
-}
-}
-
-// TestAllCreateBodiesUseDateNotDateFirst is a regression guard ensuring no
+// TestRequestBodiesUseDateNotDateFirst is a regression guard ensuring no
 // create/update command accidentally maps the --date flag to "date_first".
-// This catches the class of bug where API response field names (date_first)
-// leak into request body construction.
-func TestAllCreateBodiesUseDateNotDateFirst(t *testing.T) {
-// These represent the field maps as constructed by each create command.
-// If a new command is added that builds request bodies, add it here.
-commands := []struct {
-name   string
-fields map[string]interface{}
+// The YNAB API returns "date_first" in responses but expects "date" in requests.
+func TestRequestBodiesUseDateNotDateFirst(t *testing.T) {
+cases := []struct {
+name    string
+fields  map[string]interface{}
 wrapper string
 }{
-{
-"transactions create",
-map[string]interface{}{
-"account_id": "acc-1",
-"date":       "2024-03-15",
-"amount":     int64(-50000),
-},
-"transaction",
-},
-{
-"scheduled create",
-map[string]interface{}{
-"account_id": "acc-1",
-"date":       "2024-04-01",
-"amount":     int64(-100000),
-"frequency":  "monthly",
-},
-"scheduled_transaction",
-},
+{"transactions create", map[string]interface{}{"account_id": "acc-1", "date": "2024-03-15", "amount": int64(-50000)}, "transaction"},
+{"scheduled create", map[string]interface{}{"account_id": "acc-1", "date": "2024-04-01", "amount": int64(-100000), "frequency": "monthly"}, "scheduled_transaction"},
+{"scheduled update", map[string]interface{}{"date": "2024-05-01"}, "scheduled_transaction"},
 }
 
-for _, cmd := range commands {
-t.Run(cmd.name, func(t *testing.T) {
-body := map[string]interface{}{cmd.wrapper: cmd.fields}
-b, err := json.Marshal(body)
+for _, tc := range cases {
+t.Run(tc.name, func(t *testing.T) {
+if _, bad := tc.fields["date_first"]; bad {
+t.Error("field map contains 'date_first' — API expects 'date'")
+}
+if _, ok := tc.fields["date"]; !ok {
+t.Error("field map missing 'date'")
+}
+// Also verify the serialized form, since that's what goes over the wire.
+b, err := json.Marshal(map[string]interface{}{tc.wrapper: tc.fields})
 if err != nil {
 t.Fatal(err)
 }
-// Scan the serialized JSON for date_first — it should never appear
-// in a request body.
 if strings.Contains(string(b), "date_first") {
-t.Errorf("%s request body contains 'date_first' instead of 'date'", cmd.name)
+t.Errorf("serialized body contains 'date_first'")
 }
 })
 }
