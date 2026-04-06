@@ -271,3 +271,37 @@ if txObj["amount"].(float64) != -50000 {
 t.Errorf("amount = %v", txObj["amount"])
 }
 }
+
+// TestRequestBodiesUseDateNotDateFirst is a regression guard ensuring no
+// create/update command accidentally maps the --date flag to "date_first".
+// The YNAB API returns "date_first" in responses but expects "date" in requests.
+func TestRequestBodiesUseDateNotDateFirst(t *testing.T) {
+cases := []struct {
+name    string
+fields  map[string]interface{}
+wrapper string
+}{
+{"transactions create", map[string]interface{}{"account_id": "acc-1", "date": "2024-03-15", "amount": int64(-50000)}, "transaction"},
+{"scheduled create", map[string]interface{}{"account_id": "acc-1", "date": "2024-04-01", "amount": int64(-100000), "frequency": "monthly"}, "scheduled_transaction"},
+{"scheduled update", map[string]interface{}{"date": "2024-05-01"}, "scheduled_transaction"},
+}
+
+for _, tc := range cases {
+t.Run(tc.name, func(t *testing.T) {
+if _, bad := tc.fields["date_first"]; bad {
+t.Error("field map contains 'date_first' — API expects 'date'")
+}
+if _, ok := tc.fields["date"]; !ok {
+t.Error("field map missing 'date'")
+}
+// Also verify the serialized form, since that's what goes over the wire.
+b, err := json.Marshal(map[string]interface{}{tc.wrapper: tc.fields})
+if err != nil {
+t.Fatal(err)
+}
+if strings.Contains(string(b), "date_first") {
+t.Errorf("serialized body contains 'date_first'")
+}
+})
+}
+}

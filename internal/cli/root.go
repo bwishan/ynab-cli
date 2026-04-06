@@ -3,6 +3,7 @@ package cli
 
 import (
 "fmt"
+"io"
 
 "github.com/spf13/cobra"
 
@@ -13,12 +14,13 @@ import (
 
 // App is the root CLI application.
 type App struct {
-rootCmd   *cobra.Command
-Version   string
-Commit    string
-BuildDate string
-client    *api.Client
-printer   *output.Printer
+rootCmd      *cobra.Command
+Version      string
+Commit       string
+BuildDate    string
+client       *api.Client
+printer      *output.Printer
+outputWriter io.Writer
 }
 
 // New creates the root CLI app and registers all commands.
@@ -50,7 +52,7 @@ PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 if cmd.RunE == nil && cmd.Run == nil {
 return nil
 }
-if cmd.Name() == "configure" {
+if cmd.Name() == "configure" || cmd.Name() == "serve" {
 return nil
 }
 return a.initContext(cmd)
@@ -76,6 +78,7 @@ a.registerPayeeCommands()
 a.registerScheduledCommands()
 a.registerMonthCommands()
 a.registerMoneyMovementCommands()
+a.registerMCPCommand()
 
 return a
 }
@@ -98,9 +101,23 @@ return fmt.Errorf("invalid output format %q (valid: json, table, csv)", formatSt
 }
 
 pretty, _ := cmd.Flags().GetBool("pretty")
+if a.outputWriter != nil {
+a.printer = output.NewPrinterWithWriter(format, pretty, a.outputWriter)
+} else {
 a.printer = output.NewPrinter(format, pretty)
+}
 
 return nil
+}
+
+// SetOutput redirects all command output to the given writer instead of stdout.
+func (a *App) SetOutput(w io.Writer) {
+a.outputWriter = w
+}
+
+// RootCmd returns the root cobra command for introspection.
+func (a *App) RootCmd() *cobra.Command {
+return a.rootCmd
 }
 
 // Run parses the CLI arguments and dispatches to the appropriate handler.

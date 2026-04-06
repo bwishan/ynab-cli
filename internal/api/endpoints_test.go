@@ -903,7 +903,12 @@ func TestScheduledTransactions(t *testing.T) {
 		defer ts.Close()
 		c := clientFor(ts)
 
-		body := map[string]interface{}{"scheduled_transaction": map[string]interface{}{"amount": -100000}}
+		body := map[string]interface{}{"scheduled_transaction": map[string]interface{}{
+			"account_id": "acc-1",
+			"date":       "2024-04-01",
+			"amount":     -100000,
+			"frequency":  "monthly",
+		}}
 		_, err := c.CreateScheduledTransaction("plan-1", body)
 		if err != nil {
 			t.Fatal(err)
@@ -916,6 +921,21 @@ func TestScheduledTransactions(t *testing.T) {
 		}
 		if log.Body == "" {
 			t.Error("expected non-empty body")
+		}
+		// Verify the body uses "date" not "date_first"
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(log.Body), &parsed); err != nil {
+			t.Fatalf("failed to parse body: %v", err)
+		}
+		st, ok := parsed["scheduled_transaction"].(map[string]interface{})
+		if !ok {
+			t.Fatal("missing scheduled_transaction in body")
+		}
+		if _, exists := st["date_first"]; exists {
+			t.Error("body contains 'date_first' — API expects 'date' for create")
+		}
+		if st["date"] != "2024-04-01" {
+			t.Errorf("date = %v, want 2024-04-01", st["date"])
 		}
 	})
 

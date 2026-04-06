@@ -134,7 +134,7 @@ func (a *App) registerTransactionCommands() {
 	}
 	createCmd.Flags().String("account-id", "", "Account ID (required)")
 	createCmd.Flags().String("date", "", "Transaction date (required)")
-	createCmd.Flags().Int64("amount", 0, "Amount in milliunits (required)")
+	createCmd.Flags().Int64("amount", 0, "Amount in milliunits, negative for outflows (required)")
 	createCmd.Flags().String("payee-id", "", "Payee ID")
 	createCmd.Flags().String("payee-name", "", "Payee name")
 	createCmd.Flags().String("category-id", "", "Category ID")
@@ -223,7 +223,7 @@ func (a *App) registerTransactionCommands() {
 	}
 	updateCmd.Flags().String("account-id", "", "Account ID")
 	updateCmd.Flags().String("date", "", "Transaction date")
-	updateCmd.Flags().Int64("amount", 0, "Amount in milliunits")
+	updateCmd.Flags().Int64("amount", 0, "Amount in milliunits, negative for outflows")
 	updateCmd.Flags().String("payee-id", "", "Payee ID")
 	updateCmd.Flags().String("payee-name", "", "Payee name")
 	updateCmd.Flags().String("category-id", "", "Category ID")
