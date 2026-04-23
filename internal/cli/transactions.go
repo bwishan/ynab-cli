@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -90,6 +91,19 @@ func (a *App) registerTransactionCommands() {
 			approved, _ := cmd.Flags().GetBool("approved")
 			flagColor, _ := cmd.Flags().GetString("flag-color")
 			importID, _ := cmd.Flags().GetString("import-id")
+			splits, _ := cmd.Flags().GetStringArray("split")
+			subtransactions, splitTotal, err := parseSplitFlags(splits)
+			if err != nil {
+				return fmt.Errorf("invalid --split: %w", err)
+			}
+			if len(subtransactions) > 0 {
+				if categoryID != "" {
+					return fmt.Errorf("--category-id cannot be used when --split is set")
+				}
+				if splitTotal != amount {
+					return fmt.Errorf("split amounts sum to %d but parent --amount is %d", splitTotal, amount)
+				}
+			}
 
 			tx := map[string]interface{}{
 				"account_id": accountID,
@@ -120,6 +134,9 @@ func (a *App) registerTransactionCommands() {
 			if importID != "" {
 				tx["import_id"] = importID
 			}
+			if len(subtransactions) > 0 {
+				tx["subtransactions"] = subtransactions
+			}
 
 			body := map[string]interface{}{
 				"transaction": tx,
@@ -143,6 +160,7 @@ func (a *App) registerTransactionCommands() {
 	createCmd.Flags().Bool("approved", false, "Whether the transaction is approved")
 	createCmd.Flags().String("flag-color", "", "Flag color")
 	createCmd.Flags().String("import-id", "", "Import ID")
+	createCmd.Flags().StringArray("split", nil, "Split subtransaction(s). Accepts JSON array or repeatable key=value pairs")
 	_ = createCmd.MarkFlagRequired("account-id")
 	_ = createCmd.MarkFlagRequired("date")
 	_ = createCmd.MarkFlagRequired("amount")
@@ -170,6 +188,23 @@ func (a *App) registerTransactionCommands() {
 			approved, _ := cmd.Flags().GetBool("approved")
 			flagColor, _ := cmd.Flags().GetString("flag-color")
 			importID, _ := cmd.Flags().GetString("import-id")
+			splits, _ := cmd.Flags().GetStringArray("split")
+			subtransactions, splitTotal, err := parseSplitFlags(splits)
+			if err != nil {
+				return fmt.Errorf("invalid --split: %w", err)
+			}
+			splitChanged := cmd.Flags().Changed("split")
+			if len(subtransactions) > 0 {
+				if categoryID != "" {
+					return fmt.Errorf("--category-id cannot be used when --split is set")
+				}
+				if !cmd.Flags().Changed("amount") {
+					return fmt.Errorf("--amount is required when using --split on update")
+				}
+				if splitTotal != amount {
+					return fmt.Errorf("split amounts sum to %d but parent --amount is %d", splitTotal, amount)
+				}
+			}
 
 			tx := map[string]interface{}{}
 			if cmd.Flags().Changed("account-id") {
@@ -205,6 +240,9 @@ func (a *App) registerTransactionCommands() {
 			if cmd.Flags().Changed("import-id") {
 				tx["import_id"] = importID
 			}
+			if splitChanged {
+				tx["subtransactions"] = subtransactions
+			}
 
 			if len(tx) == 0 {
 				return fmt.Errorf("at least one field flag is required")
@@ -232,6 +270,7 @@ func (a *App) registerTransactionCommands() {
 	updateCmd.Flags().Bool("approved", false, "Whether the transaction is approved")
 	updateCmd.Flags().String("flag-color", "", "Flag color")
 	updateCmd.Flags().String("import-id", "", "Import ID")
+	updateCmd.Flags().StringArray("split", nil, "Split subtransaction(s). Accepts JSON array or repeatable key=value pairs")
 
 	// ── delete ──────────────────────────────────────────────────────────
 	deleteCmd := &cobra.Command{
@@ -412,6 +451,111 @@ func (a *App) registerTransactionCommands() {
 	txCmd.AddCommand(listCmd, getCmd, createCmd, updateCmd, deleteCmd, importCmd,
 		listByAccountCmd, listByCategoryCmd, listByPayeeCmd, listByMonthCmd, bulkUpdateCmd)
 	a.rootCmd.AddCommand(txCmd)
+}
+
+type splitSubtransaction struct {
+	Amount     *int64 `json:"amount"`
+	CategoryID string `json:"category_id,omitempty"`
+	PayeeID    string `json:"payee_id,omitempty"`
+	PayeeName  string `json:"payee_name,omitempty"`
+	Memo       string `json:"memo,omitempty"`
+}
+
+func parseSplitFlags(flags []string) ([]map[string]interface{}, int64, error) {
+	if len(flags) == 0 {
+		return nil, 0, nil
+	}
+
+	var parsed []splitSubtransaction
+	if len(flags) == 1 && strings.HasPrefix(strings.TrimSpace(flags[0]), "[") {
+		if err := json.Unmarshal([]byte(flags[0]), &parsed); err != nil {
+			return nil, 0, fmt.Errorf("expected JSON array of subtransactions: %w", err)
+		}
+	} else {
+		parsed = make([]splitSubtransaction, 0, len(flags))
+		for i, raw := range flags {
+			split, err := parseSingleSplit(raw)
+			if err != nil {
+				return nil, 0, fmt.Errorf("split %d: %w", i+1, err)
+			}
+			parsed = append(parsed, split)
+		}
+	}
+
+	result := make([]map[string]interface{}, 0, len(parsed))
+	var total int64
+	for i, split := range parsed {
+		if split.Amount == nil {
+			return nil, 0, fmt.Errorf("split %d: missing required amount", i+1)
+		}
+		total += *split.Amount
+
+		tx := map[string]interface{}{
+			"amount": *split.Amount,
+		}
+		if split.CategoryID != "" {
+			tx["category_id"] = split.CategoryID
+		}
+		if split.PayeeID != "" {
+			tx["payee_id"] = split.PayeeID
+		}
+		if split.PayeeName != "" {
+			tx["payee_name"] = split.PayeeName
+		}
+		if split.Memo != "" {
+			tx["memo"] = split.Memo
+		}
+		result = append(result, tx)
+	}
+
+	return result, total, nil
+}
+
+func parseSingleSplit(raw string) (splitSubtransaction, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return splitSubtransaction{}, fmt.Errorf("value cannot be empty")
+	}
+
+	if strings.HasPrefix(trimmed, "{") {
+		var split splitSubtransaction
+		if err := json.Unmarshal([]byte(trimmed), &split); err != nil {
+			return splitSubtransaction{}, fmt.Errorf("invalid JSON object: %w", err)
+		}
+		return split, nil
+	}
+
+	var split splitSubtransaction
+	parts := strings.Split(trimmed, ",")
+	for _, part := range parts {
+		keyValue := strings.SplitN(strings.TrimSpace(part), "=", 2)
+		if len(keyValue) != 2 {
+			return splitSubtransaction{}, fmt.Errorf("expected key=value pairs separated by commas")
+		}
+
+		key := strings.TrimSpace(keyValue[0])
+		value := strings.TrimSpace(keyValue[1])
+		switch key {
+		case "amount":
+			amount, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return splitSubtransaction{}, fmt.Errorf("invalid amount %q: %w", value, err)
+			}
+			split.Amount = &amount
+		case "category_id":
+			split.CategoryID = value
+		case "payee_id":
+			split.PayeeID = value
+		case "payee_name":
+			split.PayeeName = value
+		case "memo":
+			split.Memo = value
+		default:
+			return splitSubtransaction{}, fmt.Errorf("unknown key %q", key)
+		}
+	}
+
+	return split, nil
 }
 
 // transactionHeaders defines the table columns for transaction list output.

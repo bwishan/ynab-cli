@@ -106,6 +106,7 @@ Budgeted amounts are in milliunits.
 | `--approved` | no | Mark as approved (flag, no value) |
 | `--flag-color <color>` | no | Transaction flag color |
 | `--import-id <id>` | no | Import ID for deduplication |
+| `--split <spec>` | no | Subtransaction split (repeatable). Accepts JSON array or `amount=...,category_id=...,memo=...` pairs |
 
 ### Transaction type filter
 
