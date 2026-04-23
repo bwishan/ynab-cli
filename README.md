@@ -145,6 +145,20 @@ ynab transactions create <plan-id> \
   --category-id <id> \
   --memo "Morning coffee"
 
+# Create a split transaction (parent category must be omitted)
+ynab transactions create <plan-id> \
+  --account-id <id> \
+  --date 2024-03-15 \
+  --amount -153932 \
+  --payee-name "Card Charge" \
+  --split '[{"amount":-129123,"category_id":"abc","memo":"Club dues"},{"amount":-24809,"category_id":"def","memo":"Dining"}]'
+
+# Update splits (split amounts must add up to --amount)
+ynab transactions update <plan-id> <transaction-id> \
+  --amount -153932 \
+  --split 'amount=-129123,category_id=abc,memo=Club dues' \
+  --split 'amount=-24809,category_id=def,memo=Dining'
+
 # Get uncategorized transactions
 ynab transactions list <plan-id> --type uncategorized
 

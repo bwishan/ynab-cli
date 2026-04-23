@@ -38,6 +38,7 @@ run_command({"command": "plans list"})
 run_command({"command": "accounts list <plan-id>"})
 run_command({"command": "transactions list <plan-id> --since-date 2024-01-01"})
 run_command({"command": "transactions create <plan-id> --account-id <id> --date 2024-03-15 --amount -50000 --payee-name \"Coffee Shop\""})
+run_command({"command": "transactions create <plan-id> --account-id <id> --date 2024-03-15 --amount -153932 --payee-name \"Card Charge\" --split \"[{\\\"amount\\\":-129123,\\\"category_id\\\":\\\"abc\\\"},{\\\"amount\\\":-24809,\\\"category_id\\\":\\\"def\\\"}]\""})
 ```
 
 Output is always JSON. Errors also come back as JSON with `id`, `name`, and `detail` fields.
@@ -116,6 +117,10 @@ Negative amounts = outflows (spending). Positive = inflows (income).
 
 Many responses also include pre-formatted fields like `amount_formatted` ("$50.00"), `activity_formatted` ("-$12.50"), and `balance_formatted` ("$200.00") — use these when presenting values to users rather than doing manual conversion.
 
+### Split Transactions (Subtransactions)
+
+For split transactions, pass one or more `--split` flags (or one JSON array), and ensure the parent `--amount` equals the sum of subtransaction amounts. The parent transaction must not set `--category-id` when `--split` is used.
+
 ### Delta Sync
 
 Many endpoints support incremental fetching via `--last-knowledge <number>`. The response includes a `server_knowledge` value — pass it on the next request to get only what changed. This is critical for staying within the 200 requests/hour rate limit.
@@ -153,6 +158,12 @@ transactions list <plan-id> --since-date 2024-01-01
 
 # Create a transaction (outflow of $50)
 transactions create <plan-id> --account-id <id> --date 2024-03-15 --amount -50000 --payee-name "Coffee Shop" --category-id <id> --memo "Morning coffee"
+
+# Create a split transaction (parent category omitted; split amounts sum to parent amount)
+transactions create <plan-id> --account-id <id> --date 2024-03-15 --amount -153932 --payee-name "Card Charge" --split '[{"amount":-129123,"category_id":"abc","memo":"Club dues"},{"amount":-24809,"category_id":"def","memo":"Dining"}]'
+
+# Update with repeatable split flags
+transactions update <plan-id> <transaction-id> --amount -153932 --split 'amount=-129123,category_id=abc,memo=Club dues' --split 'amount=-24809,category_id=def,memo=Dining'
 
 # Filter by account, category, or payee
 transactions list-by-account <plan-id> <account-id>

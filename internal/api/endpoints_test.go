@@ -477,6 +477,42 @@ func TestCreateTransaction(t *testing.T) {
 	}
 }
 
+func TestCreateTransaction_WithSubtransactions(t *testing.T) {
+	ts, log := newRecordingServer(t)
+	defer ts.Close()
+	c := clientFor(ts)
+
+	body := map[string]interface{}{
+		"transaction": map[string]interface{}{
+			"amount": -153932,
+			"subtransactions": []map[string]interface{}{
+				{"amount": -129123, "category_id": "abc"},
+				{"amount": -24809, "category_id": "def", "memo": "Dining"},
+			},
+		},
+	}
+	_, err := c.CreateTransaction("plan-1", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var reqBody map[string]interface{}
+	if err := json.Unmarshal([]byte(log.Body), &reqBody); err != nil {
+		t.Fatalf("failed to parse body: %v", err)
+	}
+	tx, ok := reqBody["transaction"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing transaction object")
+	}
+	subtx, ok := tx["subtransactions"].([]interface{})
+	if !ok {
+		t.Fatal("missing subtransactions array")
+	}
+	if len(subtx) != 2 {
+		t.Fatalf("subtransactions length = %d, want 2", len(subtx))
+	}
+}
+
 func TestUpdateTransactions(t *testing.T) {
 	ts, log := newRecordingServer(t)
 	defer ts.Close()
@@ -521,6 +557,42 @@ func TestUpdateTransaction(t *testing.T) {
 	}
 	if log.Body == "" {
 		t.Error("expected non-empty body")
+	}
+}
+
+func TestUpdateTransaction_WithSubtransactions(t *testing.T) {
+	ts, log := newRecordingServer(t)
+	defer ts.Close()
+	c := clientFor(ts)
+
+	body := map[string]interface{}{
+		"transaction": map[string]interface{}{
+			"amount": -153932,
+			"subtransactions": []map[string]interface{}{
+				{"amount": -129123, "category_id": "abc"},
+				{"amount": -24809, "category_id": "def"},
+			},
+		},
+	}
+	_, err := c.UpdateTransaction("plan-1", "tx-1", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var reqBody map[string]interface{}
+	if err := json.Unmarshal([]byte(log.Body), &reqBody); err != nil {
+		t.Fatalf("failed to parse body: %v", err)
+	}
+	tx, ok := reqBody["transaction"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing transaction object")
+	}
+	subtx, ok := tx["subtransactions"].([]interface{})
+	if !ok {
+		t.Fatal("missing subtransactions array")
+	}
+	if len(subtx) != 2 {
+		t.Fatalf("subtransactions length = %d, want 2", len(subtx))
 	}
 }
 
